@@ -1,0 +1,6 @@
+{
+  "watch": ["backend/src", "backend/.env", ".env"],
+  "ext": "js,json,env",
+  "ignore": ["backend/tests/*", "backend/prisma/*", "**/node_modules/*", "frontend/*"],
+  "delay": 300
+}

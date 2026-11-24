@@ -1,0 +1,800 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma-client"
+}
+
+// ==========================================
+// ENUMS
+// ==========================================
+
+enum PreparationStatus {
+  DRAFT
+  ANALYZING
+  READY
+  IN_PROGRESS
+  COMPLETED
+  ARCHIVED
+}
+
+enum ExperienceLevel {
+  ENTRY
+  JUNIOR
+  MID
+  SENIOR
+  LEAD
+  EXECUTIVE
+}
+
+enum InterviewCategory {
+  TECHNICAL
+  HR
+  CODING
+  SYSTEM_DESIGN
+  SCENARIO
+  COMPANY_SPECIFIC
+}
+
+enum DifficultyLevel {
+  EASY
+  MEDIUM
+  HARD
+  EXPERT
+}
+
+enum QuestionAttemptStatus {
+  DRAFT
+  SUBMITTED
+  EVALUATING
+  EVALUATED
+  SKIPPED
+}
+
+enum PracticeSessionStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+}
+
+enum CodingExecutionStatus {
+  PENDING
+  RUNNING
+  ACCEPTED
+  WRONG_ANSWER
+  TIME_LIMIT_EXCEEDED
+  MEMORY_LIMIT_EXCEEDED
+  COMPILATION_ERROR
+  RUNTIME_ERROR
+  INTERNAL_ERROR
+}
+
+enum InterviewType {
+  TECHNICAL
+  HR
+  CODING
+  SYSTEM_DESIGN
+  SCENARIO
+  MIXED
+}
+
+enum MockInterviewStatus {
+  CREATED
+  IN_PROGRESS
+  PAUSED
+  COMPLETED
+  CANCELLED
+  ABANDONED
+  FAILED
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+enum MessageType {
+  TEXT
+  AUDIO
+  CODE
+  SYSTEM_EVENT
+  INTRODUCTION
+  MAIN_QUESTION
+  FOLLOW_UP
+  ANSWER
+  CLARIFICATION
+  HINT
+  CLOSING
+}
+
+enum ImprovementPlanStatus {
+  ACTIVE
+  COMPLETED
+  PAUSED
+  ARCHIVED
+}
+
+enum LearningTaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  SKIPPED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum AIUsageOperation {
+  JOB_ANALYSIS
+  QUESTION_GENERATION
+  ANSWER_EVALUATION
+  MOCK_INTERVIEW
+  CODING_REVIEW
+  IMPROVEMENT_PLAN
+}
+
+enum AIUsageStatus {
+  SUCCESS
+  FAILED
+  RATE_LIMITED
+  TIMEOUT
+}
+
+// ==========================================
+// MODULE A: USER & AUTHENTICATION
+// ==========================================
+
+model User {
+  id                      String                   @id @default(uuid())
+  name                    String
+  email                   String                   @unique
+  password                String
+  isEmailVerified         Boolean                  @default(false)
+  isActive                Boolean                  @default(true)
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+
+  // Authentication relationships
+  profile                 UserProfile?
+  sessions                Session[]
+  emailVerificationTokens EmailVerificationToken[]
+  passwordResetTokens     PasswordResetToken[]
+
+  // Application relationships
+  preparationSessions     PreparationSession[]
+  practiceSessions        PracticeSession[]
+  questionAttempts        QuestionAttempt[]
+  codingSubmissions       CodingSubmission[]
+  mockInterviews          MockInterview[]
+  improvementPlans        ImprovementPlan[]
+  userProgresses          UserProgress[]
+  aiUsageLogs             AIUsageLog[]
+  evaluations             InterviewEvaluation[]
+  performanceReports      PerformanceReport[]
+  recommendations         ImprovementRecommendation[]
+
+  @@map("users")
+}
+
+model UserProfile {
+  id               String   @id @default(uuid())
+  userId           String   @unique
+  fullName         String?
+  profileImage     String?
+  phone            String?
+  location         String?
+  headline         String?
+  bio              String?
+  currentRole      String?
+  experience       String?
+  skills           String[] @default([])
+  preferredJobRole String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_profiles")
+}
+
+model Session {
+  id               String    @id @default(uuid())
+  userId           String
+  refreshTokenHash String
+  userAgent        String?
+  ipAddress        String?
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([refreshTokenHash])
+  @@map("sessions")
+}
+
+model EmailVerificationToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@map("email_verification_tokens")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@map("password_reset_tokens")
+}
+
+// ==========================================
+// MODULE B: JOB PREPARATION
+// ==========================================
+
+model PreparationSession {
+  id                String             @id @default(uuid())
+  userId            String
+  title             String
+  companyName       String
+  jobTitle          String
+  location          String?
+  experienceLevel   ExperienceLevel    @default(MID)
+  yearsOfExperience Int?
+  preferredLanguage String             @default("JavaScript")
+  difficulty        DifficultyLevel    @default(MEDIUM)
+  status            PreparationStatus  @default(DRAFT)
+  progress          Int                @default(0) // 0-100
+  preferences       Json               @default("[]") // Array of preparation focus preferences
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  deletedAt         DateTime?          // Soft delete support
+
+  // Relationships
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobDescription    JobDescription?
+  jobAnalysis       JobAnalysis?
+  questions         InterviewQuestion[]
+  codingChallenges  CodingChallenge[]
+  practiceSessions  PracticeSession[]
+  mockInterviews    MockInterview[]
+  improvementPlans  ImprovementPlan[]
+  aiUsageLogs       AIUsageLog[]
+  performanceReports PerformanceReport[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([userId, status])
+  @@index([userId, createdAt])
+  @@map("preparation_sessions")
+}
+
+model JobDescription {
+  id                   String             @id @default(uuid())
+  preparationSessionId String             @unique
+  rawText              String             @db.Text
+  sourceType           String             @default("PASTED_TEXT") // PASTED_TEXT, FILE_UPLOAD, URL
+  originalFileName     String?
+  fileSize             Int?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  preparationSession   PreparationSession @relation(fields: [preparationSessionId], references: [id], onDelete: Cascade)
+
+  @@map("job_descriptions")
+}
+
+model JobAnalysis {
+  id                   String             @id @default(uuid())
+  preparationSessionId String             @unique
+  jobTitle             String
+  companyName          String?
+  seniorityLevel       String?
+  requiredExperience   String?
+  responsibilities     Json               @default("[]")
+  requiredSkills       Json               @default("[]")
+  preferredSkills      Json               @default("[]")
+  technicalSkills      Json               @default("[]")
+  softSkills           Json               @default("[]")
+  technologies         Json               @default("[]")
+  qualifications       Json               @default("[]")
+  interviewDifficulty  DifficultyLevel    @default(MEDIUM)
+  skillGapAnalysis     Json               @default("{}")
+  rawAnalysis          Json?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  preparationSession   PreparationSession @relation(fields: [preparationSessionId], references: [id], onDelete: Cascade)
+
+  @@map("job_analyses")
+}
+
+// ==========================================
+// MODULE C: INTERVIEW QUESTION MANAGEMENT
+// ==========================================
+
+model InterviewQuestion {
+  id                   String             @id @default(uuid())
+  preparationSessionId String
+  category             InterviewCategory  @default(TECHNICAL)
+  question             String             @db.Text
+  description          String?            @db.Text
+  difficulty           DifficultyLevel    @default(MEDIUM)
+  expectedConcepts     Json               @default("[]")
+  hints                Json               @default("[]")
+  referenceAnswer      String?            @db.Text
+  explanation          String?            @db.Text
+  estimatedTime        Int                @default(5) // in minutes
+  tags                 Json               @default("[]")
+  displayOrder         Int                @default(0)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  preparationSession   PreparationSession @relation(fields: [preparationSessionId], references: [id], onDelete: Cascade)
+  attempts             QuestionAttempt[]
+
+  @@index([preparationSessionId])
+  @@index([category])
+  @@index([difficulty])
+  @@index([preparationSessionId, category])
+  @@map("interview_questions")
+}
+
+model QuestionAttempt {
+  id                String                @id @default(uuid())
+  questionId        String
+  userId            String
+  practiceSessionId String?
+  attemptNumber     Int                   @default(1)
+  answer            String                @db.Text
+  answerFormat      String                @default("TEXT") // TEXT, CODE, SYSTEM_DESIGN_STRUCTURED
+  revealedHints     Json                  @default("[]")
+  isBookmarked      Boolean               @default(false)
+  needsReview       Boolean               @default(false)
+  selfRating        Int?                  // 1-5 user self-assessment
+  personalNotes     String?               @db.Text
+  score             Int?                  // 0-100
+  feedback          String?               @db.Text
+  strengths         Json                  @default("[]")
+  weaknesses        Json                  @default("[]")
+  suggestedAnswer   String?               @db.Text
+  timeTaken         Int?                  // in seconds
+  status            QuestionAttemptStatus @default(SUBMITTED)
+  draftSavedAt      DateTime?
+  submittedAt       DateTime?
+  attemptedAt       DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  question          InterviewQuestion     @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  user              User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  practiceSession   PracticeSession?      @relation(fields: [practiceSessionId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([questionId])
+  @@index([practiceSessionId])
+  @@index([attemptedAt])
+  @@index([userId, questionId])
+  @@index([userId, isBookmarked])
+  @@index([userId, needsReview])
+  @@map("question_attempts")
+}
+
+model PracticeSession {
+  id                   String                @id @default(uuid())
+  userId               String
+  preparationSessionId String
+  title                String
+  selectedCategories   Json                  @default("[]")
+  difficulty           DifficultyLevel       @default(MEDIUM)
+  totalQuestions       Int                   @default(0)
+  attemptedQuestions   Int                   @default(0)
+  completedQuestions   Int                   @default(0)
+  skippedQuestions     Int                   @default(0)
+  currentQuestionIndex Int                   @default(0)
+  status               PracticeSessionStatus @default(IN_PROGRESS)
+  startedAt            DateTime              @default(now())
+  lastActivityAt       DateTime              @default(now())
+  completedAt          DateTime?
+  durationSeconds      Int                   @default(0)
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  user                 User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  preparationSession   PreparationSession    @relation(fields: [preparationSessionId], references: [id], onDelete: Cascade)
+  attempts             QuestionAttempt[]
+  codingSubmissions    CodingSubmission[]
+
+  @@index([userId])
+  @@index([preparationSessionId])
+  @@index([status])
+  @@index([userId, status])
+  @@index([userId, createdAt])
+  @@map("practice_sessions")
+}
+
+// ==========================================
+// MODULE D: CODING ASSESSMENT
+// ==========================================
+
+model CodingChallenge {
+  id                      String             @id @default(uuid())
+  preparationSessionId    String
+  questionId              String?
+  title                   String
+  problemStatement        String?            @db.Text
+  description             String             @db.Text
+  difficulty              DifficultyLevel    @default(MEDIUM)
+  category                String             @default("Algorithms")
+  supportedLanguages      Json               @default("[\"javascript\", \"python\", \"java\", \"cpp\", \"c\", \"typescript\"]")
+  inputFormat             String?            @db.Text
+  outputFormat            String?            @db.Text
+  constraints             Json               @default("[]")
+  sampleInput             String?            @db.Text
+  sampleOutput            String?            @db.Text
+  explanation             String?            @db.Text
+  hints                   Json               @default("[]")
+  expectedTimeComplexity  String?
+  expectedSpaceComplexity String?
+  timeLimit               Int                @default(2000) // ms
+  memoryLimit             Int                @default(128)  // MB
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
+
+  preparationSession      PreparationSession @relation(fields: [preparationSessionId], references: [id], onDelete: Cascade)
+  testCases               CodingTestCase[]
+  submissions             CodingSubmission[]
+
+  @@index([preparationSessionId])
+  @@index([difficulty])
+  @@index([questionId])
+  @@map("coding_challenges")
+}
+
+model CodingTestCase {
+  id             String          @id @default(uuid())
+  challengeId    String
+  input          String          @db.Text
+  expectedOutput String          @db.Text
+  isSample       Boolean         @default(false)
+  isHidden       Boolean         @default(false)
+  displayOrder   Int             @default(0)
+  createdAt      DateTime        @default(now())
+
+  challenge      CodingChallenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+
+  @@index([challengeId])
+  @@index([challengeId, isHidden])
+  @@index([challengeId, isSample])
+  @@map("coding_test_cases")
+}
+
+model CodingSubmission {
+  id                   String                @id @default(uuid())
+  challengeId          String
+  userId               String
+  practiceSessionId    String?
+  language             String
+  sourceCode           String                @db.Text
+  executionStatus      CodingExecutionStatus @default(PENDING)
+  testCasesPassed      Int                   @default(0)
+  totalTestCases       Int                   @default(0)
+  executionTime        Int?                  // ms
+  memoryUsed           Int?                  // KB
+  output               String?               @db.Text
+  errorMessage         String?               @db.Text
+  compilationError     String?               @db.Text
+  runtimeError         String?               @db.Text
+  testResults          Json                  @default("[]")
+  providerSubmissionId String?
+  submittedAt          DateTime              @default(now())
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  challenge            CodingChallenge       @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  user                 User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  practiceSession      PracticeSession?      @relation(fields: [practiceSessionId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([challengeId])
+  @@index([practiceSessionId])
+  @@index([submittedAt])
+  @@index([userId, challengeId])
+  @@map("coding_submissions")
+}
+
+// ==========================================
+// MODULE E: MOCK INTERVIEW
+// ==========================================
+
+model MockInterview {
+  id                   String               @id @default(uuid())
+  preparationSessionId String
+  userId               String
+  title                String               @default("AI Mock Interview")
+  interviewType        InterviewType        @default(TECHNICAL)
+  difficulty           DifficultyLevel      @default(MEDIUM)
+  experienceLevel      ExperienceLevel      @default(MID)
+  durationMinutes      Int                  @default(30)
+  questionLimit        Int                  @default(5)
+  interviewerPersonality String             @default("Professional")
+  language             String               @default("English")
+  preferences          Json                 @default("{}")
+  currentQuestionIndex Int                  @default(0)
+  totalQuestions       Int                  @default(0)
+  status               MockInterviewStatus  @default(CREATED)
+  startedAt            DateTime?
+  pausedAt             DateTime?
+  resumedAt            DateTime?
+  completedAt          DateTime?
+  lastActivityAt       DateTime?
+  duration             Int?                 // in seconds
+  overallScore         Int?                 // 0-100
+  contextSummary       String?              @db.Text
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+
+  preparationSession   PreparationSession   @relation(fields: [preparationSessionId], references: [id], onDelete: Cascade)
+  user                 User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages             InterviewMessage[]
+  evaluation           InterviewEvaluation?
+
+  @@index([userId])
+  @@index([preparationSessionId])
+  @@index([status])
+  @@index([startedAt])
+  @@index([userId, status])
+  @@index([userId, createdAt])
+  @@map("mock_interviews")
+}
+
+model InterviewMessage {
+  id              String        @id @default(uuid())
+  mockInterviewId String
+  role            MessageRole   @default(USER)
+  content         String        @db.Text
+  messageType     MessageType   @default(TEXT)
+  sequenceNumber  Int
+  questionId      String?
+  parentMessageId String?
+  metadata        Json          @default("{}")
+  createdAt       DateTime      @default(now())
+
+  mockInterview   MockInterview @relation(fields: [mockInterviewId], references: [id], onDelete: Cascade)
+
+  @@unique([mockInterviewId, sequenceNumber])
+  @@index([mockInterviewId])
+  @@index([mockInterviewId, sequenceNumber])
+  @@map("interview_messages")
+}
+
+model InterviewEvaluation {
+  id                     String         @id @default(uuid())
+  userId                 String?
+  sourceType             String         @default("MOCK_INTERVIEW") // MOCK_INTERVIEW, PRACTICE_ANSWER, CODING_SUBMISSION
+  sourceId               String?
+  mockInterviewId        String?        @unique
+  questionAttemptId      String?
+  codingSubmissionId     String?
+  overallScore           Int            // 0-100
+  classification         String?        // Excellent, Very Good, Good, Average, Needs Improvement, Poor
+  rubricVersion          String         @default("1.0.0")
+  evaluationStatus       String         @default("COMPLETED") // PENDING, PROCESSING, COMPLETED, FAILED
+  technicalAccuracy      Int?           // 0-100
+  communicationScore     Int?           // 0-100
+  problemSolvingScore    Int?           // 0-100
+  completenessScore      Int?           // 0-100
+  confidenceScore        Int?           // 0-100
+  criterionScores        Json           @default("[]")
+  strengths              Json           @default("[]")
+  weaknesses             Json           @default("[]")
+  missingConcepts        Json           @default("[]")
+  recommendations        Json           @default("[]")
+  improvementSuggestions Json           @default("[]")
+  detailedFeedback       String?        @db.Text
+  improvedAnswer         String?        @db.Text
+  confidence             Float?
+  limitations            Json           @default("[]")
+  evaluatedAt            DateTime       @default(now())
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+
+  mockInterview          MockInterview? @relation(fields: [mockInterviewId], references: [id], onDelete: Cascade)
+  user                   User?          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([sourceType])
+  @@index([sourceId])
+  @@index([questionAttemptId])
+  @@index([codingSubmissionId])
+  @@index([evaluatedAt])
+  @@map("interview_evaluations")
+}
+
+model PerformanceReport {
+  id                   String              @id @default(uuid())
+  userId               String
+  preparationSessionId String?
+  reportType           String              @default("COMPREHENSIVE") // COMPREHENSIVE, MOCK_INTERVIEW, CODING, PRACTICE
+  title                String
+  overallScore         Int                 @default(0) // 0-100
+  classification       String?             @default("Good")
+  categoryScores       Json                @default("{}")
+  skillScores          Json                @default("{}")
+  summary              String?             @db.Text
+  strengths            Json                @default("[]")
+  weaknesses           Json                @default("[]")
+  recommendations      Json                @default("[]")
+  evaluationCount      Int                 @default(0)
+  metrics              Json                @default("{}")
+  generatedAt          DateTime            @default(now())
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  user                 User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  preparationSession   PreparationSession? @relation(fields: [preparationSessionId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([preparationSessionId])
+  @@index([generatedAt])
+  @@map("performance_reports")
+}
+
+model ImprovementRecommendation {
+  id                String       @id @default(uuid())
+  userId            String
+  evaluationId      String?
+  skill             String
+  weakness          String       @db.Text
+  whyItMatters      String?      @db.Text
+  recommendedAction String       @db.Text
+  practiceActivity  String?      @db.Text
+  priority          TaskPriority @default(MEDIUM)
+  estimatedMinutes  Int          @default(30)
+  status            String       @default("PENDING") // PENDING, ACCEPTED, DISMISSED
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@map("improvement_recommendations")
+}
+
+// ==========================================
+// MODULE F: LEARNING AND IMPROVEMENT
+// ==========================================
+
+model ImprovementPlan {
+  id                   String                @id @default(uuid())
+  userId               String
+  preparationSessionId String?
+  title                String
+  description          String?               @db.Text
+  status               ImprovementPlanStatus @default(ACTIVE)
+  priority             TaskPriority          @default(MEDIUM)
+  targetSkills         Json                  @default("[]")
+  identifiedWeaknesses Json                  @default("[]")
+  startDate            DateTime              @default(now())
+  targetDate           DateTime?
+  completionPercentage Int                   @default(0) // 0-100
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  user                 User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  preparationSession   PreparationSession?   @relation(fields: [preparationSessionId], references: [id], onDelete: SetNull)
+  tasks                LearningTask[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([userId, status])
+  @@map("improvement_plans")
+}
+
+model LearningTask {
+  id                String             @id @default(uuid())
+  improvementPlanId String
+  userId            String?
+  preparationSessionId String?
+  title             String
+  description       String?            @db.Text
+  skillName         String?
+  category          String             @default("General")
+  priority          TaskPriority       @default(MEDIUM)
+  status            LearningTaskStatus @default(PENDING)
+  estimatedMinutes  Int                @default(30)
+  dueDate           DateTime?
+  completedAt       DateTime?
+  resourceUrl       String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  improvementPlan   ImprovementPlan    @relation(fields: [improvementPlanId], references: [id], onDelete: Cascade)
+
+  @@index([improvementPlanId])
+  @@index([userId])
+  @@index([skillName])
+  @@index([status])
+  @@index([dueDate])
+  @@map("learning_tasks")
+}
+
+model UserProgress {
+  id                String            @id @default(uuid())
+  userId            String
+  category          InterviewCategory @default(TECHNICAL)
+  skillName         String
+  totalAttempts     Int               @default(0)
+  completedAttempts Int               @default(0)
+  averageScore      Float             @default(0.0)
+  proficiencyLevel  String            @default("Beginner") // Beginner, Intermediate, Advanced, Expert
+  status            String            @default("DEVELOPING") // STRONG, DEVELOPING, NEEDS_IMPROVEMENT, NOT_ASSESSED
+  lastAssessedDate  DateTime?
+  lastPracticedAt   DateTime          @default(now())
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, category, skillName])
+  @@index([userId])
+  @@map("user_progress")
+}
+
+// ==========================================
+// MODULE G: AI USAGE TRACKING
+// ==========================================
+
+model AIUsageLog {
+  id                   String             @id @default(uuid())
+  userId               String
+  preparationSessionId String?
+  operationType        AIUsageOperation
+  provider             String             @default("Gemini")
+  model                String             @default("gemini-2.0-flash")
+  promptTokens         Int                @default(0)
+  completionTokens     Int                @default(0)
+  totalTokens          Int                @default(0)
+  estimatedCost        Float              @default(0.0)
+  status               AIUsageStatus      @default(SUCCESS)
+  errorCode            String?
+  durationMs           Int                @default(0)
+  createdAt            DateTime           @default(now())
+
+  user                 User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  preparationSession   PreparationSession? @relation(fields: [preparationSessionId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([operationType])
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@index([preparationSessionId])
+  @@map("ai_usage_logs")
+}
